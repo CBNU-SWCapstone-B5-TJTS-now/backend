@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: nowhere
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/nowhere
+    username: nowhere
+    password: nowhere1234
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+server:
+  port: 8080
+
+jwt:
+  secret: nowhere-secret-key-for-jwt-signing-must-be-long-enough
+  expiration: 86400000
