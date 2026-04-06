@@ -24,6 +24,11 @@ spring:
 server:
   port: 8080
 
+logging:
+  charset:
+    console: UTF-8
+    file: UTF-8
+
 jwt:
   secret: nowhere-secret-key-for-jwt-signing-must-be-long-enough
   expiration: 86400000
