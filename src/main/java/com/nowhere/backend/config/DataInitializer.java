@@ -23,7 +23,7 @@ public class DataInitializer implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         if (locationRepository.count() > 0) {
-            log.info("[DataInitializer] 장소 데이터 이미 존재. 초기화 건너뜀.");
+            log.info("[DataInitializer] Location data already exists. Skipping initialization.");
             return;
         }
 
@@ -71,6 +71,6 @@ public class DataInitializer implements ApplicationRunner {
         );
 
         locationRepository.saveAll(locations);
-        log.info("[DataInitializer] 테스트 장소 {}개 초기화 완료.", locations.size());
+        log.info("[DataInitializer] {} locations initialized successfully.", locations.size());
     }
 }
