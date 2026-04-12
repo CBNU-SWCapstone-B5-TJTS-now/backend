@@ -10,6 +10,7 @@ import com.nowhere.backend.exception.BusinessException;
 import com.nowhere.backend.repository.CongestionReportRepository;
 import com.nowhere.backend.repository.LocationRepository;
 import com.nowhere.backend.repository.UserRepository;
+import com.nowhere.backend.util.GeofenceUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,16 @@ public class CongestionReportService {
 
         Location location = locationRepository.findById(request.getLocationId())
                 .orElseThrow(() -> new BusinessException("장소를 찾을 수 없습니다", HttpStatus.NOT_FOUND));
+
+        // 지오펜스 검증 → 반경 밖이면 403
+        boolean inside = GeofenceUtil.isInsideGeofence(
+                request.getLatitude(), request.getLongitude(),
+                location.getLatitude().doubleValue(), location.getLongitude().doubleValue(),
+                location.getGeofenceRadius()
+        );
+        if (!inside) {
+            throw new BusinessException("해당 장소의 반경 내에서만 제보할 수 있습니다", HttpStatus.FORBIDDEN);
+        }
 
         int ttlMinutes = resolveTtl(request.getCustomTtlMinutes(), location);
 

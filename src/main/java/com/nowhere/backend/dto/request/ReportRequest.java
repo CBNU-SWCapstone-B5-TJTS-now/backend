@@ -15,6 +15,12 @@ public class ReportRequest {
     @NotNull(message = "congestionLevel은 필수입니다")
     private CongestionLevel congestionLevel;
 
+    @NotNull(message = "latitude는 필수입니다")
+    private Double latitude;
+
+    @NotNull(message = "longitude는 필수입니다")
+    private Double longitude;
+
     // null이면 장소 기본값 사용
     private Integer customTtlMinutes;
 }
