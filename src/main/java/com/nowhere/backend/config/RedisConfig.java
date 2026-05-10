@@ -10,7 +10,6 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.listener.PatternTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
-import org.springframework.data.redis.listener.adapter.MessageListenerAdapter;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 @Configuration
@@ -48,16 +47,11 @@ public class RedisConfig {
     @Bean
     public RedisMessageListenerContainer redisMessageListenerContainer(
             RedisConnectionFactory connectionFactory,
-            MessageListenerAdapter listenerAdapter
+            SseEmitterService sseEmitterService
     ) {
         RedisMessageListenerContainer container = new RedisMessageListenerContainer();
         container.setConnectionFactory(connectionFactory);
-        container.addMessageListener(listenerAdapter, new PatternTopic(CONGESTION_CHANNEL));
+        container.addMessageListener(sseEmitterService, new PatternTopic(CONGESTION_CHANNEL));
         return container;
-    }
-
-    @Bean
-    public MessageListenerAdapter listenerAdapter(SseEmitterService sseEmitterService) {
-        return new MessageListenerAdapter(sseEmitterService, "onMessage");
     }
 }

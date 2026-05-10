@@ -5,6 +5,7 @@ import com.nowhere.backend.dto.response.CongestionSseEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.Message;
+import org.springframework.data.redis.connection.MessageListener;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -14,7 +15,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class SseEmitterService {
+public class SseEmitterService implements MessageListener {
 
     private static final long SSE_TIMEOUT = 30 * 60 * 1000L; // 30분
     private static final String EVENT_NAME = "congestion-update";
@@ -40,6 +41,7 @@ public class SseEmitterService {
     }
 
     // Redis Pub/Sub 메시지 수신 → 모든 SSE 클라이언트에 브로드캐스트
+    @Override
     public void onMessage(Message message, byte[] pattern) {
         try {
             CongestionSseEvent event = objectMapper.readValue(message.getBody(), CongestionSseEvent.class);
