@@ -50,7 +50,14 @@ now·here는 충북대학교 캠퍼스 내 학식당, 카페, 라운지 등 주�
 
 ### 확장 기능 (Phase 2)
 
-- Peer Review 상호 검증 시스템
+#### ✅ 개발 중
+- **Peer Review 상호 검증 시스템** — 혼잡도 제보에 동의/반박 투표, SSE 실시간 반영, Trust Score 배치 계산
+  - `PeerReview` 엔티티 (UNIQUE 중복 투표 방지)
+  - `User.trustScore` — 제보 만료 후 자동 집계
+  - `POST /api/reviews` — 리뷰 등록 API
+  - `GET /api/locations/stream` — SSE 실시간 스트리밍
+
+#### 📋 예정
 - 빈자리 알림 구독 기능
 - 현장 한정 SOS 미니 게시판
 
