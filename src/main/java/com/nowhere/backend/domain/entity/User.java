@@ -34,7 +34,7 @@ public class User {
     private UserRole role = UserRole.USER;
 
     @Builder.Default
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "integer default 0")
     private int trustScore = 0;
 
     @CreationTimestamp
