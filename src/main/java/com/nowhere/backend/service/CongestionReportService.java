@@ -26,6 +26,7 @@ public class CongestionReportService {
     private final LocationRepository locationRepository;
     private final UserRepository userRepository;
     private final CongestionRedisService congestionRedisService;
+    private final CongestionPublishService congestionPublishService;
 
     @Transactional
     public ReportResponse createReport(String email, ReportRequest request) {
@@ -65,6 +66,7 @@ public class CongestionReportService {
                 LocalDateTime.now()
         );
         congestionRedisService.save(location.getId(), congestionInfo, ttlMinutes);
+        congestionPublishService.publish(location.getId(), request.getCongestionLevel(), 0);
 
         return ReportResponse.from(saved);
     }

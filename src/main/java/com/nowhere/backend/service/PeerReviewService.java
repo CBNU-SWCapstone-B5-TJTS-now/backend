@@ -25,6 +25,7 @@ public class PeerReviewService {
     private final CongestionReportRepository reportRepository;
     private final UserRepository userRepository;
     private final CongestionRedisService congestionRedisService;
+    private final CongestionPublishService congestionPublishService;
 
     @Transactional
     public PeerReviewResponse createReview(String email, PeerReviewRequest request) {
@@ -56,6 +57,11 @@ public class PeerReviewService {
         }
 
         syncRedisApprovalCount(report);
+        congestionPublishService.publish(
+                report.getLocation().getId(),
+                report.getCongestionLevel(),
+                report.getApprovalCount()
+        );
 
         return PeerReviewResponse.of(review, report.getApprovalCount());
     }

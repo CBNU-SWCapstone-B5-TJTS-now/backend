@@ -3,14 +3,20 @@ package com.nowhere.backend.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.nowhere.backend.service.SseEmitterService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.listener.PatternTopic;
+import org.springframework.data.redis.listener.RedisMessageListenerContainer;
+import org.springframework.data.redis.listener.adapter.MessageListenerAdapter;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 @Configuration
 public class RedisConfig {
+
+    public static final String CONGESTION_CHANNEL = "pubsub:congestion";
 
     @Bean
     public ObjectMapper objectMapper() {
@@ -37,5 +43,21 @@ public class RedisConfig {
         template.afterPropertiesSet();
 
         return template;
+    }
+
+    @Bean
+    public RedisMessageListenerContainer redisMessageListenerContainer(
+            RedisConnectionFactory connectionFactory,
+            MessageListenerAdapter listenerAdapter
+    ) {
+        RedisMessageListenerContainer container = new RedisMessageListenerContainer();
+        container.setConnectionFactory(connectionFactory);
+        container.addMessageListener(listenerAdapter, new PatternTopic(CONGESTION_CHANNEL));
+        return container;
+    }
+
+    @Bean
+    public MessageListenerAdapter listenerAdapter(SseEmitterService sseEmitterService) {
+        return new MessageListenerAdapter(sseEmitterService, "onMessage");
     }
 }
