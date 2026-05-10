@@ -44,7 +44,23 @@ public class CongestionReport {
     @Column(nullable = false)
     private LocalDateTime expiresAt;
 
+    @Builder.Default
+    @Column(nullable = false)
+    private boolean trustScoreProcessed = false;
+
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;
+
+    public void incrementApprovalCount() {
+        this.approvalCount++;
+    }
+
+    public void incrementRejectionCount() {
+        this.rejectionCount++;
+    }
+
+    public void markTrustScoreProcessed() {
+        this.trustScoreProcessed = true;
+    }
 }

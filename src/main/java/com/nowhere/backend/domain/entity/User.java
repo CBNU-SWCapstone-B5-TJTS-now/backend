@@ -33,10 +33,18 @@ public class User {
     @Builder.Default
     private UserRole role = UserRole.USER;
 
+    @Builder.Default
+    @Column(nullable = false)
+    private int trustScore = 0;
+
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;
 
     @UpdateTimestamp
     private LocalDateTime updatedAt;
+
+    public void addTrustScore(int delta) {
+        this.trustScore = Math.max(0, this.trustScore + delta);
+    }
 }
