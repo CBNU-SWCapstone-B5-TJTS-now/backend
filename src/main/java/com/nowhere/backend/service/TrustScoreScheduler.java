@@ -17,7 +17,6 @@ import java.util.List;
 @RequiredArgsConstructor
 public class TrustScoreScheduler {
 
-    private static final int VERIFIED_THRESHOLD = 3;
     private static final int DISPUTED_THRESHOLD = 3;
 
     private final CongestionReportRepository reportRepository;
@@ -47,7 +46,6 @@ public class TrustScoreScheduler {
     }
 
     private int calculateDelta(CongestionReport report) {
-        if (report.getApprovalCount() >= VERIFIED_THRESHOLD) return 1;
         if (report.getRejectionCount() >= DISPUTED_THRESHOLD) return -1;
         return 0;
     }
