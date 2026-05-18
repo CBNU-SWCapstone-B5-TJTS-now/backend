@@ -31,6 +31,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/locations/**").permitAll()
                         .requestMatchers("/api/subscriptions/**").authenticated()
                         .requestMatchers("/api/sse/notifications").authenticated()
+                        .requestMatchers("/api/sos/posts").permitAll()
+                        .requestMatchers("/api/sos/posts/*/stream").permitAll()
+                        .requestMatchers("/api/sos/**").authenticated()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
