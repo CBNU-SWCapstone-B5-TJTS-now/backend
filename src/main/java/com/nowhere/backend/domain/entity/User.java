@@ -37,6 +37,10 @@ public class User {
     @Column(nullable = false, columnDefinition = "integer default 0")
     private int trustScore = 0;
 
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "integer default 0")
+    private int point = 0;
+
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;
@@ -46,5 +50,16 @@ public class User {
 
     public void addTrustScore(int delta) {
         this.trustScore = Math.max(0, this.trustScore + delta);
+    }
+
+    public void addPoint(int delta) {
+        this.point = Math.max(0, this.point + delta);
+    }
+
+    public void deductPoint(int amount) {
+        if (this.point < amount) {
+            throw new IllegalStateException("포인트가 부족합니다.");
+        }
+        this.point -= amount;
     }
 }
