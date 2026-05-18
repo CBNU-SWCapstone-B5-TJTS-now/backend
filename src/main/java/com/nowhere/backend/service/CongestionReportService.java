@@ -58,6 +58,11 @@ public class CongestionReportService {
 
         CongestionReport saved = reportRepository.save(report);
 
+        // 이전 혼잡도 조회 (알림 발송 여부 판단용)
+        boolean levelChanged = congestionRedisService.find(location.getId())
+                .map(prev -> prev.getLevel() != request.getCongestionLevel())
+                .orElse(true); // Redis에 데이터 없으면 첫 제보 → 알림 발송
+
         // Redis 업데이트 → 지도 즉시 반영
         CongestionInfo congestionInfo = new CongestionInfo(
                 request.getCongestionLevel(),
@@ -66,7 +71,11 @@ public class CongestionReportService {
                 LocalDateTime.now()
         );
         congestionRedisService.save(location.getId(), congestionInfo, ttlMinutes);
-        congestionPublishService.publish(location.getId(), request.getCongestionLevel(), 0);
+
+        // 혼잡도 수준이 변경된 경우에만 구독자 알림 발송
+        if (levelChanged) {
+            congestionPublishService.publish(location.getId(), request.getCongestionLevel(), 0);
+        }
 
         return ReportResponse.from(saved);
     }
