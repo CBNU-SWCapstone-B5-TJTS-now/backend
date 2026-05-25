@@ -21,8 +21,8 @@ public class AuthService {
 
     public AuthResponse signup(SignupRequest request) {
         User user = userService.signup(request);
-        String token = jwtUtil.generateToken(user.getEmail());
-        return new AuthResponse(token, user.getNickname());
+        String token = jwtUtil.generateToken(user.getEmail(), user.getRole().name());
+        return new AuthResponse(token, user.getNickname(), user.getRole().name());
     }
 
     public AuthResponse login(LoginRequest request) {
@@ -32,7 +32,7 @@ public class AuthService {
             throw new BusinessException("이메일 또는 비밀번호가 올바르지 않습니다", HttpStatus.UNAUTHORIZED);
         }
 
-        String token = jwtUtil.generateToken(user.getEmail());
-        return new AuthResponse(token, user.getNickname());
+        String token = jwtUtil.generateToken(user.getEmail(), user.getRole().name());
+        return new AuthResponse(token, user.getNickname(), user.getRole().name());
     }
 }

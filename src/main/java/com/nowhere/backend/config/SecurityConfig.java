@@ -34,6 +34,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/sos/posts").permitAll()
                         .requestMatchers("/api/sos/posts/*/stream").permitAll()
                         .requestMatchers("/api/sos/**").authenticated()
+                        .requestMatchers("/api/proposals/**").authenticated()
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
