@@ -22,7 +22,7 @@ public class AuthService {
     public AuthResponse signup(SignupRequest request) {
         User user = userService.signup(request);
         String token = jwtUtil.generateToken(user.getEmail(), user.getRole().name());
-        return new AuthResponse(token, user.getNickname());
+        return new AuthResponse(token, user.getNickname(), user.getRole().name());
     }
 
     public AuthResponse login(LoginRequest request) {
@@ -33,6 +33,6 @@ public class AuthService {
         }
 
         String token = jwtUtil.generateToken(user.getEmail(), user.getRole().name());
-        return new AuthResponse(token, user.getNickname());
+        return new AuthResponse(token, user.getNickname(), user.getRole().name());
     }
 }
