@@ -32,7 +32,7 @@ RUN chown app:app app.jar
 USER app
 
 ENV SPRING_PROFILES_ACTIVE=prod
-ENV JAVA_OPTS="-Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8"
+ENV JAVA_OPTS="-Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8 -XX:MaxRAMPercentage=70.0 -XX:InitialRAMPercentage=50.0"
 
 EXPOSE 8080
 
