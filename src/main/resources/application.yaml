@@ -32,3 +32,8 @@ logging:
 jwt:
   secret: nowhere-secret-key-for-jwt-signing-must-be-long-enough
   expiration: 86400000
+
+app:
+  cors:
+    # Expo Web 개발 서버 origin. 배포 환경 값은 application-prod.yaml 참고.
+    allowed-origins: http://localhost:8081,http://localhost:19006
