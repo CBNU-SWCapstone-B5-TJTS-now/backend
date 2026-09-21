@@ -27,4 +27,6 @@ logging:
 app:
   cors:
     # 웹 프론트가 배포될 origin. 도메인이 정해지면 CORS_ALLOWED_ORIGINS로 덮어쓴다.
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:https://nowhere-app.cloud,https://www.nowhere-app.cloud}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:https://nowhere-app.cloud,https://www.nowhere-app.cloud,https://nowhere-admin-web.vercel.app}
+    # Vercel 프리뷰 배포(nowhere-admin-web-<hash>-<team>.vercel.app 등). 와일드카드 패턴.
+    allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:https://nowhere-admin-web-*.vercel.app}

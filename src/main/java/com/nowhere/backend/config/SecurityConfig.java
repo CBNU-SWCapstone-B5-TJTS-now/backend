@@ -56,10 +56,13 @@ public class SecurityConfig {
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource(
-            @Value("${app.cors.allowed-origins}") List<String> allowedOrigins) {
+            @Value("${app.cors.allowed-origins}") List<String> allowedOrigins,
+            @Value("${app.cors.allowed-origin-patterns:}") List<String> allowedOriginPatterns) {
 
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(allowedOrigins);
+        // Vercel 프리뷰 배포처럼 origin이 매번 바뀌는 경우를 위한 와일드카드 패턴.
+        config.setAllowedOriginPatterns(allowedOriginPatterns);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "Last-Event-ID"));
         config.setExposedHeaders(List.of("Authorization"));
