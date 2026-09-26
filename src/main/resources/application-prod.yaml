@@ -17,6 +17,16 @@ spring:
 jwt:
   secret: ${JWT_SECRET}
 
+# 배포 파이프라인 헬스체크용. health만 노출하고 상세 정보(DB/Redis 상태)는 숨긴다.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
 logging:
   level:
     root: WARN
