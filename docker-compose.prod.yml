@@ -1,8 +1,7 @@
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    # GitHub Actions가 빌드해 GHCR에 올린 이미지를 받아서 실행한다 (서버에서 빌드하지 않음).
+    image: ghcr.io/cbnu-swcapstone-b5-tjts-now/backend:latest
     container_name: nowhere-app
     restart: unless-stopped
     environment:
@@ -10,8 +9,9 @@ services:
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
+    # Nginx(127.0.0.1:8080)만 접근. Docker는 방화벽을 우회하므로 호스트 레벨에서도 외부 노출을 막는다.
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
