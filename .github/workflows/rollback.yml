@@ -18,6 +18,7 @@ concurrency:
 permissions:
   contents: read
   packages: read
+  actions: read   # Slack 알림의 실행 시간 조회
 
 env:
   HEALTH_URL: https://api.nowhere-app.cloud/actuator/health
@@ -28,6 +29,7 @@ jobs:
     steps:
       # 입력값이 서버 셸로 넘어가므로 형식을 엄격하게 제한한다.
       - name: Validate tag
+        id: validate
         env:
           TAG: ${{ inputs.tag }}
         run: |
@@ -39,6 +41,7 @@ jobs:
       # 서버 코드(git)는 건드리지 않고 이미지만 교체한다.
       # 배포와 같은 스크립트로 무중단 전환하며, 지정한 태그가 헬스체크에 실패하면 전환하지 않는다.
       - name: Rollback on EC2
+        id: server
         uses: appleboy/ssh-action@v1.2.5
         env:
           GHCR_USER: ${{ github.actor }}
@@ -59,6 +62,7 @@ jobs:
             bash infra/deploy/deploy.sh "$IMAGE_TAG"
 
       - name: Health check (public)
+        id: public
         run: |
           for i in $(seq 1 6); do
             if curl -fsS "$HEALTH_URL"; then
@@ -71,3 +75,50 @@ jobs:
           done
           echo "::error::외부 헬스체크 실패: $HEALTH_URL"
           exit 1
+
+      # 결과와 상관없이 Slack으로 알린다. 알림 실패는 롤백 결과에 영향을 주지 않는다.
+      - uses: actions/checkout@v7
+        if: always()
+        with:
+          sparse-checkout: .github/actions
+
+      - id: result
+        if: always()
+        env:
+          VALIDATE: ${{ steps.validate.outcome }}
+          SERVER: ${{ steps.server.outcome }}
+          PUBLIC: ${{ steps.public.outcome }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          status=failure; stage=""; note=""; tag="$TAG"
+          if [[ "$PUBLIC" == success ]]; then
+            status=success; note="지정한 버전으로 무중단 전환 완료"
+          elif [[ "$VALIDATE" == failure ]]; then
+            stage="태그 확인"; note="태그 형식 오류로 실행하지 않음. 운영 서버 변경 없음"; tag="(형식 오류)"
+          elif [[ "$SERVER" == failure ]]; then
+            stage="서버 전환"; note="지정한 버전으로 전환하지 않음. 운영 서버는 기존 버전으로 계속 서비스 중 (사유는 실행 기록 상단 오류 참고)"
+          elif [[ "$PUBLIC" == failure ]]; then
+            stage="외부 헬스체크"; note="*지정한 버전으로 전환됐지만 외부(HTTPS) 확인 실패. 확인 필요*"
+          elif [[ "$SERVER" == cancelled || "$PUBLIC" == cancelled || "$VALIDATE" == cancelled ]]; then
+            status=cancelled; note="운영 서버 상태는 Actions 실행 기록에서 확인 필요"
+          else
+            stage="알 수 없음"; note="실행 기록 확인 필요"
+          fi
+          {
+            echo "status=$status"
+            echo "stage=$stage"
+            echo "note=$note"
+            echo "tag=$tag"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/slack-notify
+        if: always()
+        continue-on-error: true
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          title: 롤백
+          status: ${{ steps.result.outputs.status }}
+          image-tag: ${{ steps.result.outputs.tag }}
+          failed-stage: ${{ steps.result.outputs.stage }}
+          note: ${{ steps.result.outputs.note }}
+          show-commit: 'false'

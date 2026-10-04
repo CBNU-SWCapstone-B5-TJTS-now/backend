@@ -1,0 +1,105 @@
+name: Slack notify
+description: 배포/롤백 결과를 Slack Incoming Webhook으로 보낸다. Webhook이 없으면 아무것도 하지 않는다.
+
+inputs:
+  webhook-url:
+    description: Slack Incoming Webhook URL (secrets.SLACK_WEBHOOK_URL)
+    required: false
+    default: ''
+  title:
+    description: 작업 이름 (예 배포, 롤백)
+    required: true
+  status:
+    description: success | failure | cancelled
+    required: true
+  image-tag:
+    description: 대상 이미지 태그 (예 sha-c34166b)
+    required: false
+    default: ''
+  failed-stage:
+    description: 실패한 단계 이름
+    required: false
+    default: ''
+  note:
+    description: 운영 상태 안내 (예 기존 버전으로 계속 서비스 중)
+    required: false
+    default: ''
+  show-commit:
+    description: 트리거 커밋 정보를 표시할지 (롤백은 false)
+    required: false
+    default: 'true'
+  github-token:
+    description: 실행 시간/커밋 조회용
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        WEBHOOK: ${{ inputs.webhook-url }}
+        TITLE: ${{ inputs.title }}
+        STATUS: ${{ inputs.status }}
+        IMAGE_TAG: ${{ inputs.image-tag }}
+        FAILED_STAGE: ${{ inputs.failed-stage }}
+        NOTE: ${{ inputs.note }}
+        SHOW_COMMIT: ${{ inputs.show-commit }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        ACTOR: ${{ github.actor }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
+      run: |
+        if [[ -z "$WEBHOOK" ]]; then
+          echo "SLACK_WEBHOOK_URL이 등록되지 않아 알림을 보내지 않음"
+          exit 0
+        fi
+
+        case "$STATUS" in
+          success)   ICON="✅"; RESULT="성공"; COLOR="#2eb67d" ;;
+          cancelled) ICON="⚪"; RESULT="취소"; COLOR="#9e9e9e" ;;
+          *)         ICON="❌"; RESULT="실패"; COLOR="#e01e5a" ;;
+        esac
+
+        # 실행 시간 (run 시작 ~ 지금)
+        DURATION=""
+        if STARTED=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .run_started_at 2>/dev/null); then
+          SEC=$(( $(date +%s) - $(date -d "$STARTED" +%s) ))
+          DURATION="$((SEC / 60))분 $((SEC % 60))초"
+        fi
+
+        COMMIT_MSG=""
+        if [[ "$SHOW_COMMIT" == true ]]; then
+          COMMIT_MSG=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA" --jq '.commit.message' 2>/dev/null | head -1 || true)
+        fi
+
+        # 값은 모두 jq --arg로 넣어 따옴표/특수문자가 섞여도 JSON이 깨지지 않게 한다.
+        PAYLOAD=$(jq -n \
+          --arg color "$COLOR" \
+          --arg head "*$ICON $TITLE $RESULT* · nowhere-backend" \
+          --arg tag "$IMAGE_TAG" \
+          --arg actor "$ACTOR" \
+          --arg stage "$FAILED_STAGE" \
+          --arg note "$NOTE" \
+          --arg commit "$COMMIT_MSG" \
+          --arg commit_link "<$COMMIT_URL|${GITHUB_SHA::7}>" \
+          --arg run "<$RUN_URL|실행 기록 보기>" \
+          --arg duration "$DURATION" '
+          # Slack mrkdwn에서 &, <, >는 링크/멘션 문법이라 외부 값(커밋 메시지 등)은 이스케이프한다.
+          def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;");
+          def field($k; $v): {type: "mrkdwn", text: "*\($k)*\n\($v)"};
+          [ (if $tag    != "" then field("버전"; "`\($tag | esc)`") else empty end),
+            field("실행"; $actor | esc),
+            (if $stage  != "" then field("실패 단계"; $stage | esc) else empty end),
+            (if $commit != "" then field("커밋"; "\($commit_link) \($commit | esc)") else empty end)
+          ] as $fields
+          | {attachments: [{color: $color, blocks: (
+              [ {type: "section", text: {type: "mrkdwn", text: $head}},
+                {type: "section", fields: $fields} ]
+              + (if $note != "" then [{type: "section", text: {type: "mrkdwn", text: ($note | esc)}}] else [] end)
+              + [ {type: "context", elements: [{type: "mrkdwn",
+                    text: ([$run, (if $duration != "" then "소요 \($duration)" else empty end)] | join(" · "))}]} ]
+            )}]}')
+
+        curl -fsS -X POST -H 'Content-Type: application/json' --data "$PAYLOAD" "$WEBHOOK" >/dev/null
+        echo "Slack 알림 전송: $TITLE $RESULT"
