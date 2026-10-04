@@ -1,0 +1,73 @@
+name: Rollback
+
+# Actions 화면에서 태그를 입력해 해당 버전 이미지로 되돌린다.
+# 태그는 GHCR 패키지 페이지 또는 Deploy 실행 기록에서 확인한다 (예: sha-c34166b).
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '되돌릴 이미지 태그 (예: sha-c34166b)'
+        required: true
+        type: string
+
+# Deploy와 같은 그룹이라 배포 중에는 끝날 때까지 기다렸다가 실행된다.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  HEALTH_URL: https://api.nowhere-app.cloud/actuator/health
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    steps:
+      # 입력값이 서버 셸로 넘어가므로 형식을 엄격하게 제한한다.
+      - name: Validate tag
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [[ ! "$TAG" =~ ^sha-[0-9a-f]{7}$ ]]; then
+            echo "::error::태그 형식이 올바르지 않음: '$TAG' (예: sha-c34166b)"
+            exit 1
+          fi
+
+      # 서버 코드(git)는 건드리지 않고 이미지만 교체한다.
+      # 지정한 태그도 헬스체크에 실패하면 배포 스크립트가 원래 버전으로 되돌린다.
+      - name: Rollback on EC2
+        uses: appleboy/ssh-action@v1.2.5
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_TAG: ${{ inputs.tag }}
+          GITHUB_ACTIONS: 'true'
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: GHCR_USER,GHCR_TOKEN,IMAGE_TAG,GITHUB_ACTIONS
+          command_timeout: 15m
+          script: |
+            set -euo pipefail
+            cd ~/backend
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            trap 'docker logout ghcr.io' EXIT
+            bash infra/deploy/deploy.sh "$IMAGE_TAG"
+
+      - name: Health check (public)
+        run: |
+          for i in $(seq 1 6); do
+            if curl -fsS "$HEALTH_URL"; then
+              echo
+              echo "healthy (attempt $i)"
+              exit 0
+            fi
+            echo "waiting... ($i/6)"
+            sleep 5
+          done
+          echo "::error::외부 헬스체크 실패: $HEALTH_URL"
+          exit 1
