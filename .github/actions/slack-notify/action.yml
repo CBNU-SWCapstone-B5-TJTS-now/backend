@@ -68,9 +68,17 @@ runs:
           DURATION="$((SEC / 60))분 $((SEC % 60))초"
         fi
 
-        COMMIT_MSG=""
+        # PR 머지 커밋이면 "Merge pull request #N from ..." 대신 PR 번호와 제목(메시지 둘째 문단)을 보여준다.
+        COMMIT_MSG=""; PR_LINK=""
         if [[ "$SHOW_COMMIT" == true ]]; then
-          COMMIT_MSG=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA" --jq '.commit.message' 2>/dev/null | head -1 || true)
+          FULL_MSG=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA" --jq '.commit.message' 2>/dev/null || true)
+          COMMIT_MSG=$(head -1 <<< "$FULL_MSG")
+          if [[ "$COMMIT_MSG" =~ ^Merge\ pull\ request\ \#([0-9]+) ]]; then
+            PR_NUM="${BASH_REMATCH[1]}"
+            PR_LINK="<$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/pull/$PR_NUM|#$PR_NUM>"
+            PR_TITLE=$(tail -n +2 <<< "$FULL_MSG" | grep -m1 -v '^[[:space:]]*$' || true)
+            COMMIT_MSG="${PR_TITLE:-$COMMIT_MSG}"
+          fi
         fi
 
         # 값은 모두 jq --arg로 넣어 따옴표/특수문자가 섞여도 JSON이 깨지지 않게 한다.
@@ -83,6 +91,7 @@ runs:
           --arg note "$NOTE" \
           --arg commit "$COMMIT_MSG" \
           --arg commit_link "<$COMMIT_URL|${GITHUB_SHA::7}>" \
+          --arg pr_link "$PR_LINK" \
           --arg run "<$RUN_URL|실행 기록 보기>" \
           --arg duration "$DURATION" '
           # Slack mrkdwn에서 &, <, >는 링크/멘션 문법이라 외부 값(커밋 메시지 등)은 이스케이프한다.
@@ -91,7 +100,8 @@ runs:
           [ (if $tag    != "" then field("버전"; "`\($tag | esc)`") else empty end),
             field("실행"; $actor | esc),
             (if $stage  != "" then field("실패 단계"; $stage | esc) else empty end),
-            (if $commit != "" then field("커밋"; "\($commit_link) \($commit | esc)") else empty end)
+            (if $commit != "" then field("커밋";
+              "\($commit_link)\(if $pr_link != "" then " · PR \($pr_link)" else "" end)\n\($commit | esc)") else empty end)
           ] as $fields
           | {attachments: [{color: $color, blocks: (
               [ {type: "section", text: {type: "mrkdwn", text: $head}},
