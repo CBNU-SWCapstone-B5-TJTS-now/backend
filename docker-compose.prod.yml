@@ -1,25 +1,40 @@
+# app-blue / app-green 공통 설정. 무중단 배포를 위해 둘을 번갈아 띄운다.
+x-app: &app
+  # GitHub Actions가 빌드해 GHCR에 올린 이미지를 받아서 실행한다 (서버에서 빌드하지 않음).
+  # 배포 스크립트(infra/deploy/deploy.sh)가 APP_IMAGE로 커밋별 이미지(sha-xxxxxxx)를 지정한다.
+  image: ${APP_IMAGE:-ghcr.io/cbnu-swcapstone-b5-tjts-now/backend:latest}
+  restart: unless-stopped
+  environment:
+    SPRING_PROFILES_ACTIVE: prod
+    DB_USERNAME: ${DB_USERNAME}
+    DB_PASSWORD: ${DB_PASSWORD}
+    JWT_SECRET: ${JWT_SECRET}
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  mem_limit: 1.5g
+  # 종료 시 처리 중인 요청을 마무리할 시간 (Spring graceful shutdown 기본 30초)
+  stop_grace_period: 35s
+
 services:
-  app:
-    # GitHub Actions가 빌드해 GHCR에 올린 이미지를 받아서 실행한다 (서버에서 빌드하지 않음).
-    # 배포 스크립트(infra/deploy/deploy.sh)가 APP_IMAGE로 커밋별 이미지(sha-xxxxxxx)를 지정한다.
-    # APP_IMAGE 없이 직접 compose를 실행하면 latest를 쓰므로, 롤백 상태가 풀릴 수 있다.
-    image: ${APP_IMAGE:-ghcr.io/cbnu-swcapstone-b5-tjts-now/backend:latest}
-    container_name: nowhere-app
-    restart: unless-stopped
-    environment:
-      SPRING_PROFILES_ACTIVE: prod
-      DB_USERNAME: ${DB_USERNAME}
-      DB_PASSWORD: ${DB_PASSWORD}
-      JWT_SECRET: ${JWT_SECRET}
-    # Nginx(127.0.0.1:8080)만 접근. Docker는 방화벽을 우회하므로 호스트 레벨에서도 외부 노출을 막는다.
+  # Nginx가 바라보는 쪽(활성)은 /etc/nginx/snippets/nowhere-upstream.conf의 포트로 정해진다.
+  # profiles 때문에 `docker compose up -d`만으로는 app이 뜨지 않고, 서비스명을 지정해야 뜬다.
+  # 포트는 127.0.0.1에만 바인딩한다 (Docker는 방화벽을 우회하므로 호스트 레벨에서도 외부 노출을 막음).
+  app-blue:
+    <<: *app
+    container_name: nowhere-app-blue
+    profiles: [blue]
     ports:
       - "127.0.0.1:8080:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    mem_limit: 1.5g
+
+  app-green:
+    <<: *app
+    container_name: nowhere-app-green
+    profiles: [green]
+    ports:
+      - "127.0.0.1:8081:8080"
 
   postgres:
     image: postgres:16

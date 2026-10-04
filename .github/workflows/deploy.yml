@@ -2,7 +2,7 @@ name: Deploy
 
 # main에 반영되면 테스트 → 이미지 빌드/푸시 → EC2 배포 순서로 진행한다.
 # 앞 단계가 실패하면 뒤 단계는 실행되지 않는다.
-# 배포 후 헬스체크가 실패하면 서버의 배포 스크립트가 직전 이미지로 자동 복귀한다.
+# 서버의 배포 스크립트가 blue-green으로 무중단 전환하며, 새 버전 헬스체크가 실패하면 전환하지 않는다.
 on:
   push:
     branches: [main]
@@ -121,7 +121,7 @@ jobs:
     steps:
       # 서버의 ~/backend는 main 클론이다. git pull로 compose 파일과 배포 스크립트를 최신화하고,
       # 이미지는 이 job의 GITHUB_TOKEN으로 로그인해 받는다 (서버에 장기 토큰을 두지 않음).
-      # 배포/헬스체크/자동 롤백은 infra/deploy/deploy.sh가 서버 안에서 처리한다.
+      # 새 버전 기동/헬스체크/Nginx 전환은 infra/deploy/deploy.sh가 서버 안에서 처리한다.
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.2.5
         env:

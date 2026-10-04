@@ -10,8 +10,13 @@ AWS EC2(Amazon Linux 2023) 배포 서버의 Nginx 리버스 프록시 설정 원
 | `nowhere-api.conf` | `/etc/nginx/conf.d/nowhere-api.conf` |
 | `snippets/proxy-common.conf` | `/etc/nginx/snippets/proxy-common.conf` |
 | `snippets/sse-common.conf` | `/etc/nginx/snippets/sse-common.conf` |
+| `snippets/nowhere-upstream.conf` | `/etc/nginx/snippets/nowhere-upstream.conf` |
 
-- `api.nowhere-app.cloud` → `127.0.0.1:8080` (Spring Boot 컨테이너)
+- `api.nowhere-app.cloud` → 활성 app 컨테이너 (blue `127.0.0.1:8080` / green `127.0.0.1:8081`)
+  - 활성 포트는 `nowhere-upstream.conf` 한 줄로 정해지고, 배포 스크립트(`infra/deploy/deploy.sh`)가
+    배포 때마다 이 파일을 바꾸고 `nginx -s reload` 한다. 직접 수정하지 않는다.
+  - 서버 재구축 시 저장소의 파일(8080)을 그대로 설치하면 blue가 활성인 상태로 시작한다.
+    운영 중에 `install`을 다시 실행하면 활성 포트가 8080으로 덮어써지므로 주의한다.
 - `nowhere-app.cloud`, `www.nowhere-app.cloud` → 상태 확인용 텍스트 응답
   (웹 프론트 배포 전까지 API를 이 호스트로 노출하지 않는다)
 
