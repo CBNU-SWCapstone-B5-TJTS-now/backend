@@ -8,6 +8,7 @@ import com.nowhere.backend.dto.response.SosPostResponse;
 import com.nowhere.backend.dto.response.SosReplyResponse;
 import com.nowhere.backend.exception.BusinessException;
 import com.nowhere.backend.repository.*;
+import com.nowhere.backend.util.GeofenceUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -24,6 +25,7 @@ public class SosService {
     private static final int TTL_MINUTES = 30;
 
     private final UserRepository userRepository;
+    private final LocationRepository locationRepository;
     private final SosPostRepository sosPostRepository;
     private final SosReplyRepository sosReplyRepository;
     private final PointTransactionRepository pointTransactionRepository;
@@ -35,10 +37,14 @@ public class SosService {
     @Transactional
     public SosPostResponse createPost(String email, SosPostRequest request) {
         User user = getUser(email);
+        Location location = getLocation(request.getLocationId());
+
+        // 지오펜스 검증 → 장소 반경 밖이면 403
+        verifyOnSite(location, request.getLatitude(), request.getLongitude());
 
         SosPost post = SosPost.builder()
-                .locationId(request.getLocationId())
-                .locationName(request.getLocationName())
+                .locationId(location.getId())
+                .locationName(location.getName())
                 .user(user)
                 .content(request.getContent())
                 .pointOffer(request.getPointOffer())
@@ -78,6 +84,9 @@ public class SosService {
         if (!post.isOpen()) {
             throw new BusinessException("이미 진행 중이거나 종료된 게시글입니다.", HttpStatus.CONFLICT);
         }
+
+        // 지오펜스 검증 → 게시글 장소 반경 밖이면 403
+        verifyOnSite(getLocation(post.getLocationId()), request.getLatitude(), request.getLongitude());
 
         SosReply reply = SosReply.builder()
                 .post(post)
@@ -134,13 +143,18 @@ public class SosService {
     @Transactional
     public SosPostResponse completePost(String email, Long postId) {
         User requester = getUser(email);
-        SosPost post = getPost(postId);
+        SosPost post = getPostForUpdate(postId);
 
         if (!post.getUser().getId().equals(requester.getId())) {
             throw new BusinessException("게시글 작성자만 완료 처리할 수 있습니다.", HttpStatus.FORBIDDEN);
         }
         if (post.getStatus() != SosPostStatus.ACCEPTED) {
             throw new BusinessException("수락된 거래만 완료 처리할 수 있습니다.", HttpStatus.CONFLICT);
+        }
+        // 수락 후 60분이 지난 거래는 SosEscrowScheduler가 자동 취소·환불한다
+        if (isEscrowTimedOut(post)) {
+            throw new BusinessException("수락 후 60분이 지나 완료할 수 없습니다. 포인트는 자동으로 환불됩니다.",
+                    HttpStatus.CONFLICT);
         }
 
         // 수락된 답변자 찾기
@@ -151,11 +165,11 @@ public class SosService {
 
         User responder = acceptedReply.getUser();
 
-        // 에스크로 포인트 응답자에게 지급
-        if (sosRedisService.hasEscrow(postId)) {
-            int amount = sosRedisService.getEscrow(postId);
+        // 에스크로 포인트 응답자에게 지급 (금액은 수락 시 차감한 제안 포인트)
+        int amount = escrowAmount(post);
+        sosRedisService.releaseEscrow(postId);
+        if (amount > 0) {
             responder.addPoint(amount);
-            sosRedisService.releaseEscrow(postId);
 
             pointTransactionRepository.save(PointTransaction.builder()
                     .user(responder)
@@ -177,7 +191,7 @@ public class SosService {
     @Transactional
     public SosPostResponse cancelPost(String email, Long postId) {
         User requester = getUser(email);
-        SosPost post = getPost(postId);
+        SosPost post = getPostForUpdate(postId);
 
         if (!post.getUser().getId().equals(requester.getId())) {
             throw new BusinessException("게시글 작성자만 취소할 수 있습니다.", HttpStatus.FORBIDDEN);
@@ -186,24 +200,26 @@ public class SosService {
             throw new BusinessException("이미 종료된 거래입니다.", HttpStatus.CONFLICT);
         }
 
-        // 에스크로 포인트 환불
-        if (sosRedisService.hasEscrow(postId)) {
-            int amount = sosRedisService.getEscrow(postId);
-            requester.addPoint(amount);
-            sosRedisService.releaseEscrow(postId);
-
-            pointTransactionRepository.save(PointTransaction.builder()
-                    .user(requester)
-                    .type(PointTransactionType.SOS_REFUND)
-                    .amount(amount)
-                    .sosPostId(postId)
-                    .description("SOS 거래 취소 - 포인트 환불")
-                    .build());
-        }
-
-        post.cancel();
-        sosRedisService.expirePost(postId);
+        refundAndCancel(post, "SOS 거래 취소 - 포인트 환불");
         return SosPostResponse.from(post);
+    }
+
+    // ── 에스크로 자동 취소/환불 (SosEscrowScheduler에서 호출) ──────
+
+    /**
+     * 수락 후 60분 내 완료되지 않은 거래를 취소하고 에스크로 포인트를 질문자에게 환불한다.
+     * 행 잠금 후 상태를 다시 확인하므로, 그 사이 완료·취소된 거래는 건너뛴다.
+     *
+     * @return 자동 취소했으면 true
+     */
+    @Transactional
+    public boolean autoCancelTimedOutEscrow(Long postId) {
+        SosPost post = getPostForUpdate(postId);
+        if (post.getStatus() != SosPostStatus.ACCEPTED || !isEscrowTimedOut(post)) {
+            return false;
+        }
+        refundAndCancel(post, "SOS 거래 자동 취소 - 수락 후 60분 경과 환불");
+        return true;
     }
 
     // ── 거래 내역 (EX-3-7) ─────────────────────────────────────
@@ -226,6 +242,60 @@ public class SosService {
     private SosPost getPost(Long postId) {
         return sosPostRepository.findById(postId)
                 .orElseThrow(() -> new BusinessException("게시글을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+    }
+
+    private SosPost getPostForUpdate(Long postId) {
+        return sosPostRepository.findByIdForUpdate(postId)
+                .orElseThrow(() -> new BusinessException("게시글을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+    }
+
+    private Location getLocation(Long locationId) {
+        return locationRepository.findById(locationId)
+                .orElseThrow(() -> new BusinessException("장소를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+    }
+
+    private void verifyOnSite(Location location, double latitude, double longitude) {
+        boolean inside = GeofenceUtil.isInsideGeofence(
+                latitude, longitude,
+                location.getLatitude().doubleValue(), location.getLongitude().doubleValue(),
+                location.getGeofenceRadius()
+        );
+        if (!inside) {
+            throw new BusinessException("해당 장소의 반경 내에서만 SOS를 이용할 수 있습니다.", HttpStatus.FORBIDDEN);
+        }
+    }
+
+    /** 수락 시 질문자에게서 차감해 에스크로에 보관한 금액 (Redis 키 만료와 무관하게 DB 기준) */
+    private int escrowAmount(SosPost post) {
+        return post.getPointOffer() != null && post.getPointOffer() > 0 ? post.getPointOffer() : 0;
+    }
+
+    /** 에스크로 보관(SOS_ESCROW) 후 60분이 지났는지 */
+    private boolean isEscrowTimedOut(SosPost post) {
+        if (escrowAmount(post) == 0) return false;
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(SosRedisService.ESCROW_TTL_MIN);
+        return pointTransactionRepository.existsBySosPostIdAndTypeAndCreatedAtBefore(
+                post.getId(), PointTransactionType.SOS_ESCROW, cutoff);
+    }
+
+    /** 수락된 거래면 에스크로 포인트를 질문자에게 환불하고 게시글을 취소한다 */
+    private void refundAndCancel(SosPost post, String description) {
+        int amount = escrowAmount(post);
+        if (post.getStatus() == SosPostStatus.ACCEPTED && amount > 0) {
+            post.getUser().addPoint(amount);
+
+            pointTransactionRepository.save(PointTransaction.builder()
+                    .user(post.getUser())
+                    .type(PointTransactionType.SOS_REFUND)
+                    .amount(amount)
+                    .sosPostId(post.getId())
+                    .description(description)
+                    .build());
+        }
+
+        sosRedisService.releaseEscrow(post.getId());
+        post.cancel();
+        sosRedisService.expirePost(post.getId());
     }
 
     private SosPost getActivePost(Long postId) {
