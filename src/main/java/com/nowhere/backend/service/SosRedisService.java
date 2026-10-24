@@ -17,7 +17,7 @@ public class SosRedisService {
     private static final String POST_TTL_KEY = "sos:post:";
     private static final String ESCROW_KEY   = "sos:escrow:";
     private static final long   POST_TTL_MIN = 30L;
-    private static final long   ESCROW_TTL_MIN = 60L; // 수락 후 1시간 내 완료 없으면 자동 환불
+    static final long           ESCROW_TTL_MIN = 60L; // 수락 후 1시간 내 완료 없으면 자동 환불 (SosEscrowScheduler)
 
     private final RedisTemplate<String, Object> redisTemplate;
 

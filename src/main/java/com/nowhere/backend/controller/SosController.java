@@ -7,6 +7,7 @@ import com.nowhere.backend.dto.response.SosPostResponse;
 import com.nowhere.backend.dto.response.SosReplyResponse;
 import com.nowhere.backend.service.SosNotificationService;
 import com.nowhere.backend.service.SosService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -35,7 +36,7 @@ public class SosController {
     @PostMapping("/posts")
     public ResponseEntity<SosPostResponse> createPost(
             @AuthenticationPrincipal String email,
-            @RequestBody SosPostRequest request
+            @Valid @RequestBody SosPostRequest request
     ) {
         return ResponseEntity.status(HttpStatus.CREATED).body(sosService.createPost(email, request));
     }
@@ -57,7 +58,7 @@ public class SosController {
     public ResponseEntity<SosReplyResponse> createReply(
             @AuthenticationPrincipal String email,
             @PathVariable Long postId,
-            @RequestBody SosReplyRequest request
+            @Valid @RequestBody SosReplyRequest request
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(sosService.createReply(email, postId, request));
